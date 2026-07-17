@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>BookWise Login</title>
+
+    <link rel="stylesheet" href="css/style.css">
+
+</head>
+
+<body>
+
+    <div class="container">
+
+        <h2>Login</h2>
+
+        <input
+            id="email"
+            type="email"
+            placeholder="Email">
+
+        <br><br>
+
+        <input
+            id="password"
+            type="password"
+            placeholder="Password">
+
+        <br><br>
+
+        <button onclick="loginUser()">
+            Login
+        </button>
+
+        <p>
+            Don't have an account?
+            <a href="register.html">
+                Register
+            </a>
+        </p>
+
+    </div>
+
+    <!-- AWS SDK -->
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1691.0.min.js"></script>
+
+    <!-- Amazon Cognito Identity JS -->
+    <script src="https://cdn.jsdelivr.net/npm/amazon-cognito-identity-js@3.0.14/dist/amazon-cognito-identity.min.js"></script>
+
+    <!-- Your authentication code -->
+    <script src="js/auth.js"></script>
+
+</body>
+
+</html>

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>BookWise - Book Reviews</title>
+
+<link rel="stylesheet" href="css/style.css">
+
+</head>
+
+
+<body>
+
+
+<header>
+
+<div class="container">
+
+<h1>📚 BookWise</h1>
+
+<p>
+Discover, review, and rate your favorite books
+</p>
+
+
+<nav>
+
+<a href="index.html">Home</a>
+
+<a href="about.html">About</a>
+
+<a href="login.html">Login</a>
+
+<a href="register.html">Register</a>
+
+
+<button onclick="logoutUser()">
+Logout
+</button>
+
+
+<button onclick="toggleDarkMode()">
+🌙
+</button>
+
+
+</nav>
+
+
+</div>
+
+</header>
+
+
+
+
+<section class="hero">
+
+
+<div class="hero-image">
+
+<img src="images/banner.jpg" alt="Bookshelf">
+
+</div>
+
+
+
+<div class="container">
+
+
+<h2>
+Find Your Next Favorite Book
+</h2>
+
+
+<p>
+Join a community of readers sharing honest reviews.
+</p>
+
+
+<button onclick="scrollBooks()">
+Explore Books
+</button>
+
+
+</div>
+
+
+</section>
+
+
+
+
+
+
+<section class="container">
+
+
+
+<h2>
+Book Categories
+</h2>
+
+
+
+<div class="categories">
+
+
+<div>📖 Fiction</div>
+
+<div>🚀 Technology</div>
+
+<div>💡 Self Development</div>
+
+<div>🔬 Science</div>
+
+
+</div>
+
+
+
+
+
+<h2>
+Featured Books
+</h2>
+
+
+
+
+<div class="featured-books">
+
+
+
+<div class="book-card">
+
+<img src="images/book1.jpg" alt="The Alchemist">
+
+<h3>
+The Alchemist
+</h3>
+
+<p>
+A journey of dreams and discovery.
+</p>
+
+</div>
+
+
+
+
+
+<div class="book-card">
+
+<img src="images/book2.jpg" alt="Clean Code">
+
+<h3>
+Clean Code
+</h3>
+
+<p>
+Learn software development practices.
+</p>
+
+</div>
+
+
+
+
+
+<div class="book-card">
+
+<img src="images/book3.jpg" alt="Rich Dad Poor Dad">
+
+<h3>
+Rich Dad Poor Dad
+</h3>
+
+<p>
+A book about financial education and mindset.
+</p>
+
+</div>
+
+
+
+</div>
+
+
+
+
+
+
+
+<h2 id="books-section">
+Browse Books
+</h2>
+
+
+
+<div class="search-container">
+
+
+<input
+
+id="search-bar"
+
+type="text"
+
+placeholder="Search books..."
+
+onkeyup="searchBooks()">
+
+
+</div>
+
+
+
+
+<div id="books-grid" class="books-grid">
+
+</div>
+
+
+
+
+
+
+<div 
+id="review-section"
+style="display:none;">
+
+
+
+<h2>
+Add Your Review
+</h2>
+
+
+
+<div class="review-form">
+
+
+
+<input
+
+id="rating"
+
+type="number"
+
+min="1"
+
+max="5"
+
+placeholder="Rating 1-5">
+
+
+
+
+
+<textarea
+
+id="comment"
+
+placeholder="Write your review">
+
+</textarea>
+
+
+
+
+<button onclick="submitReview()">
+
+Submit Review
+
+</button>
+
+
+
+</div>
+
+
+
+</div>
+
+
+
+
+
+</section>
+
+
+
+
+
+
+<footer>
+
+
+<p>
+BookWise Serverless Book Review Platform
+</p>
+
+
+</footer>
+
+
+
+
+
+
+<!-- AWS SDK -->
+
+<script src="https://sdk.amazonaws.com/js/aws-sdk-2.1691.0.min.js"></script>
+
+
+
+
+<!-- Amazon Cognito Identity SDK -->
+
+<script src="https://cdn.jsdelivr.net/npm/amazon-cognito-identity-js@3.0.14/dist/amazon-cognito-identity.min.js"></script>
+
+
+
+
+<!-- Project JavaScript -->
+
+<script src="js/auth.js"></script>
+
+<script src="js/api.js"></script>
+
+<script src="js/script.js"></script>
+
+
+
+</body>
+
+</html>
