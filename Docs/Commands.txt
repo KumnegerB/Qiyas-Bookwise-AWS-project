@@ -1,0 +1,224 @@
+# Create Books table
+aws dynamodb create-table \
+    --table-name Books \
+    --attribute-definitions AttributeName=bookId,AttributeType=S \
+    --key-schema AttributeName=bookId,KeyType=HASH \
+    --billing-mode PAY_PER_REQUEST
+
+# Create Reviews table (composite key)
+aws dynamodb create-table \
+    --table-name Reviews \
+    --attribute-definitions \
+        AttributeName=bookId,AttributeType=S \
+        AttributeName=reviewId,AttributeType=S \
+    --key-schema \
+        AttributeName=bookId,KeyType=HASH \
+        AttributeName=reviewId,KeyType=RANGE \
+    --billing-mode PAY_PER_REQUEST
+
+# Insert sample books
+aws dynamodb put-item --table-name Books --item '{
+    "bookId": {"S": "book-001"},
+    "title": {"S": "Serverless on AWS"},
+    "author": {"S": "Jane Doe"},
+    "description": {"S": "A comprehensive guide to serverless architecture"}
+}'
+
+# Query all books
+aws dynamodb scan --table-name Books
+
+# Query reviews for a book
+aws dynamodb query \
+    --table-name Reviews \
+    --key-condition-expression "bookId = :bookId" \
+    --expression-attribute-values '{":bookId": {"S": "book-001"}}'
+
+    IAM Role Lambda execution
+
+    # Create trust policy
+cat > trust-policy.json << 'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {"Service": "lambda.amazonaws.com"},
+    "Action": "sts:AssumeRole"
+  }]
+}
+EOF
+
+# Create IAM role
+aws iam create-role \
+    --role-name BookWiseLambdaRole \
+    --assume-role-policy-document file://trust-policy.json
+
+# Attach DynamoDB permissions
+aws iam put-role-policy \
+    --role-name BookWiseLambdaRole \
+    --policy-name DynamoDBAccess \
+    --policy-document '{
+  "Version": "2012-10-17",
+  "Statement": [
+    {"Effect": "Allow","Action": ["dynamodb:GetItem","dynamodb:Scan","dynamodb:Query","dynamodb:PutItem"],"Resource": ["arn:aws:dynamodb:us-east-1:*:table/Books","arn:aws:dynamodb:us-east-1:*:table/Reviews"]},
+    {"Effect": "Allow","Action": ["logs:CreateLogGroup","logs:CreateLogStream","logs:PutLogEvents"],"Resource": "*"}
+  ]
+}'
+
+Lambda functions
+# Deploy getBooks
+cd getBooks
+zip -r ../getBooks.zip *
+cd ..
+aws lambda create-function \
+    --function-name getBooks \
+    --runtime nodejs18.x \
+    --handler getBooks/index.handler \
+    --role arn:aws:iam::926274061952:role/BookWiseLambdaRole \
+    --zip-file fileb://getBooks.zip \
+    --timeout 10
+
+# Deploy getBookById
+cd getBookById
+zip -r ../getBookById.zip *
+cd ..
+aws lambda create-function \
+    --function-name getBookById \
+    --runtime nodejs18.x \
+    --handler getBookById/index.handler \
+    --role arn:aws:iam::926274061952:role/BookWiseLambdaRole \
+    --zip-file fileb://getBookById.zip \
+    --timeout 10
+
+# Deploy addReview
+cd addReview
+zip -r ../addReview.zip *
+cd ..
+aws lambda create-function \
+    --function-name addReview \
+    --runtime nodejs18.x \
+    --handler addReview/index.handler \
+    --role arn:aws:iam::926274061952:role/BookWiseLambdaRole \
+    --zip-file fileb://addReview.zip \
+    --timeout 10
+
+# Test Lambda
+aws lambda invoke --function-name getBooks --payload '{}' response.json
+aws lambda invoke --function-name getBookById --payload '{"pathParameters":{"bookId":"book-001"}}' response.json
+aws lambda invoke --function-name addReview --payload '{"body":"{\"bookId\":\"book-001\",\"userId\":\"test\",\"rating\":5,\"comment\":\"Test\"}"}' response.json
+
+Cognito User Authentication
+# Create User Pool
+USER_POOL_ID=$(aws cognito-idp create-user-pool \
+    --pool-name BookWiseUsers \
+    --query 'UserPool.Id' \
+    --output text)
+
+# Create App Client
+APP_CLIENT_ID=$(aws cognito-idp create-user-pool-client \
+    --user-pool-id $USER_POOL_ID \
+    --client-name BookWiseClient \
+    --no-generate-secret \
+    --query 'UserPoolClient.ClientId' \
+    --output text)
+
+# Create Domain
+aws cognito-idp create-user-pool-domain \
+    --domain bookwise-auth-$(date +%s) \
+    --user-pool-id $USER_POOL_ID
+
+# Create test user
+aws cognito-idp admin-create-user \
+    --user-pool-id $USER_POOL_ID \
+    --username testuser@example.com \
+    --user-attributes Name=email,Value=testuser@example.com \
+    --temporary-password "SecurePass123!" \
+    --message-action SUPPRESS
+
+# Test login
+aws cognito-idp admin-initiate-auth \
+    --user-pool-id $USER_POOL_ID \
+    --client-id $APP_CLIENT_ID \
+    --auth-flow ADMIN_USER_PASSWORD_AUTH \
+    --auth-parameters "USERNAME=testuser@example.com,PASSWORD=SecurePass123!"
+
+    Api gate way
+    # Create API
+API_ID=$(aws apigateway create-rest-api --name BookWiseAPI --query 'id' --output text)
+
+# Get root ID
+ROOT_ID=$(aws apigateway get-resources --rest-api-id $API_ID --query 'items[0].id' --output text)
+
+# Create /books
+BOOKS_ID=$(aws apigateway create-resource --rest-api-id $API_ID --parent-id $ROOT_ID --path-part books --query 'id' --output text)
+
+# Create /books/{bookId}
+BOOK_ID=$(aws apigateway create-resource --rest-api-id $API_ID --parent-id $BOOKS_ID --path-part {bookId} --query 'id' --output text)
+
+# Create /reviews
+REVIEWS_ID=$(aws apigateway create-resource --rest-api-id $API_ID --parent-id $ROOT_ID --path-part reviews --query 'id' --output text)
+
+# Add GET method to /books
+aws apigateway put-method --rest-api-id $API_ID --resource-id $BOOKS_ID --http-method GET --authorization-type NONE
+aws apigateway put-integration --rest-api-id $API_ID --resource-id $BOOKS_ID --http-method GET --type AWS_PROXY --integration-http-method POST --uri arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:926274061952:function:getBooks/invocations
+
+# Add GET method to /books/{bookId}
+aws apigateway put-method --rest-api-id $API_ID --resource-id $BOOK_ID --http-method GET --authorization-type NONE
+aws apigateway put-integration --rest-api-id $API_ID --resource-id $BOOK_ID --http-method GET --type AWS_PROXY --integration-http-method POST --uri arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:926274061952:function:getBookById/invocations
+
+# Add POST method to /reviews
+aws apigateway put-method --rest-api-id $API_ID --resource-id $REVIEWS_ID --http-method POST --authorization-type NONE
+aws apigateway put-integration --rest-api-id $API_ID --resource-id $REVIEWS_ID --http-method POST --type AWS_PROXY --integration-http-method POST --uri arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:926274061952:function:addReview/invocations
+
+# Deploy API
+aws apigateway create-deployment --rest-api-id $API_ID --stage-name prod
+
+# Add Lambda permissions
+aws lambda add-permission --function-name getBooks --statement-id apigateway --action lambda:InvokeFunction --principal apigateway.amazonaws.com --source-arn "arn:aws:execute-api:us-east-1:926274061952:$API_ID/*/GET/books"
+aws lambda add-permission --function-name getBookById --statement-id apigateway --action lambda:InvokeFunction --principal apigateway.amazonaws.com --source-arn "arn:aws:execute-api:us-east-1:926274061952:$API_ID/*/GET/books/*"
+aws lambda add-permission --function-name addReview --statement-id apigateway --action lambda:InvokeFunction --principal apigateway.amazonaws.com --source-arn "arn:aws:execute-api:us-east-1:926274061952:$API_ID/*/POST/reviews"
+
+Cors configuration
+# Add OPTIONS method for /books
+aws apigateway put-method --rest-api-id $API_ID --resource-id $BOOKS_ID --http-method OPTIONS --authorization-type NONE
+aws apigateway put-integration --rest-api-id $API_ID --resource-id $BOOKS_ID --http-method OPTIONS --type MOCK --request-templates '{"application/json":"{\"statusCode\":200}"}'
+aws apigateway put-method-response --rest-api-id $API_ID --resource-id $BOOKS_ID --http-method OPTIONS --status-code 200 --response-parameters '{"method.response.header.Access-Control-Allow-Origin":true,"method.response.header.Access-Control-Allow-Methods":true,"method.response.header.Access-Control-Allow-Headers":true}'
+aws apigateway put-integration-response --rest-api-id $API_ID --resource-id $BOOKS_ID --http-method OPTIONS --status-code 200 --response-parameters '{"method.response.header.Access-Control-Allow-Origin":"\"*\"","method.response.header.Access-Control-Allow-Methods":"\"GET,POST,OPTIONS\"","method.response.header.Access-Control-Allow-Headers":"\"Content-Type,Authorization\""}'
+
+# Same for /books/{bookId} and /reviews
+
+testing methods 
+# Test API endpoints
+API_URL="https://$API_ID.execute-api.us-east-1.amazonaws.com/prod"
+
+curl -X GET $API_URL/books
+curl -X GET $API_URL/books/book-001
+curl -X POST $API_URL/reviews -H "Content-Type: application/json" -d '{"bookId":"book-001","userId":"test","rating":5,"comment":"Test"}'
+
+# Check Lambda logs
+aws logs describe-log-groups --log-group-name-prefix /aws/lambda/
+aws logs describe-log-streams --log-group-name /aws/lambda/addReview --order-by LastEventTime --descending --limit 1
+aws logs get-log-events --log-group-name /aws/lambda/addReview --log-stream-name [STREAM_NAME] --limit 10
+
+clean up commands 
+# Delete Lambda functions
+aws lambda delete-function --function-name getBooks
+aws lambda delete-function --function-name getBookById
+aws lambda delete-function --function-name addReview
+
+# Delete DynamoDB tables
+aws dynamodb delete-table --table-name Books
+aws dynamodb delete-table --table-name Reviews
+
+# Delete API Gateway
+aws apigateway delete-rest-api --rest-api-id $API_ID
+
+# Delete Cognito User Pool
+aws cognito-idp delete-user-pool --user-pool-id $USER_POOL_ID
+
+# Delete IAM role
+aws iam delete-role-policy --role-name BookWiseLambdaRole --policy-name DynamoDBAccess
+aws iam delete-role --role-name BookWiseLambdaRole
+
+# Delete S3 bucket
+aws s3 rm s3://bookreview-2026-qiyas-project1 --recursive
+aws s3 rb s3://bookreview-2026-qiyas-project1
